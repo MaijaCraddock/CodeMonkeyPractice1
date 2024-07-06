@@ -1,17 +1,46 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class Player : MonoBehaviour
 {
+    //Use properties for Singleton pattern
+    //All classes can get, only Player class can set
+    public static Player Instance { get; private set; }
+
+    //2:55 on video, EventArgs and EventHandler
+    public event EventHandler<OnSelectedCounterChangedEventArgs> OnSelectedCounterChanged;
+    public class OnSelectedCounterChangedEventArgs : EventArgs{
+        public ClearCounter selectedCounter;
+    }
+    [SerializeField] private float moveSpeed = 7f;
+    [SerializeField] private GameInput gameInput;
+    [SerializeField] private LayerMask countersLayerMask;
 
     private bool isWalking;
     private Vector3 lastInteractDir;
     //serialized field opens var to editor without opening it to other scripts
-    [SerializeField] private float moveSpeed = 7f;
-    [SerializeField] private GameInput gameInput;
-    [SerializeField] private LayerMask countersLayerMask;
+    private ClearCounter selectedCounter;
+
+    private void Start(){
+        gameInput.OnInteractAction += GameInput_OnInteractAction;
+    }
+
+    private void Awake(){
+        if (Instance != null){
+            Debug.LogError("There is more than one player Instance");
+        }
+        Instance = this;
+    }
+    private void GameInput_OnInteractAction(object sender, System.EventArgs e){
+        if (selectedCounter != null){
+            selectedCounter.Interact();
+        
+       }    
+    }
     private void Update(){
         HandleMovement();
         HandleInteractions();
@@ -36,8 +65,17 @@ public class Player : MonoBehaviour
         if(Physics.Raycast(transform.position, lastInteractDir, out RaycastHit raycastHit, interactDistance, countersLayerMask)){
             if(raycastHit.transform.TryGetComponent(out ClearCounter clearCounter)){
                 //has ClearCounter
-                clearCounter.Interact();
+                if (clearCounter != selectedCounter){
+                    //Change selected counter (player is looking at a diff counter now)
+                    SetSelectedCounter(clearCounter);
+                }
+            } else {
+                //raycastHit hits an object that is not a counter
+                SetSelectedCounter(null);
             }
+        } else {
+            //raycastHit hits no object whatsoever
+            SetSelectedCounter(null);
         }
         
     }
@@ -95,6 +133,14 @@ public class Player : MonoBehaviour
 
         float rotateSpeed = 10f;
         transform.forward = Vector3.Slerp (transform.forward, moveDir, Time.deltaTime*rotateSpeed);
+    }
+
+    private void SetSelectedCounter(ClearCounter selectedCounter){
+        this.selectedCounter = selectedCounter;
+
+        OnSelectedCounterChanged?.Invoke(this, new OnSelectedCounterChangedEventArgs{
+            selectedCounter = selectedCounter //construct new Args using our class (counter object)
+        });
     }
 
 }
